@@ -48,6 +48,9 @@
 #define PERIOD_2S                               2048
 #define PERIOD_4S                               4096
 
+// number of Lab Quiz points for 100% correct test results
+#define NUM_PTS_MAX 15
+
 #define MAX_PRINT_LEN 400
 
 static volatile bool isRTCExpired = false;
@@ -55,8 +58,8 @@ static volatile bool changeTempSamplingRate = false;
 static volatile bool isUSARTTxComplete = true;
 static uint8_t uartTxBuffer[MAX_PRINT_LEN] = {0};
 static uint8_t decryptBuffer[MAX_PRINT_LEN] = {0};
-static char * pass = "pass";
-static char * fail = "fail";
+static char * pass = "PASS";
+static char * fail = "FAIL";
 
 // VB COMMENT:
 // The ARM calling convention permits the use of up to 4 registers, r0-r3
@@ -73,7 +76,9 @@ extern char * asmEncrypt(char *, uint32_t);
 
 static char * inpTextArray[] = { "ABCXYZ",
                                  "abcxyz",
-                                 "\"Whoa, really?\", he said."
+                                 "\"Whoa, really?\", he said.",
+                                 "123AbC456!@#$",
+                                 ""   // Yes; a test of an empty string!
                                 };
 static uint32_t keyArray[] = {0,1,13,25};
 
@@ -97,30 +102,44 @@ static void usartDmaChannelHandler(DMAC_TRANSFER_EVENT event, uintptr_t contextH
 #endif
 
 
-// return failure count. A return value of 0 means everything passed.
-static int testResult(int testNum, 
+// Stores pass/fail counts for this pass at the locations provided by
+// passCount and failCount
+// If both strlen and decrypted contents match: passCount = 2; failCount = 0;
+// If strlen matches and decrypt doesn't, 1 pass, 1 fail
+// if strlen doesn't match, can't compare, so pass = 0, fail = 2
+// if student returns bogus pointer, this function will print garbage 
+// and/or crash
+static void testResult(int testNum, 
                       char * origText, 
                       char * cipherText, 
-                      uint32_t key) 
+                      uint32_t key,
+                      uint32_t * passCount, // these counters are reset each time
+                      uint32_t * failCount) 
 {
-    int failCount = 0;
+    *failCount = *passCount = 0;
     char *s1 = pass;
     char *s2 = pass;
-    int origLen = strlen(origText);
-    int encryptedLen = strlen(cipherText);
+    uint32_t origLen = strlen(origText);
+    uint32_t encryptedLen = strlen(cipherText);
+    
     if(origLen != encryptedLen)
     {
         // since we can't compare unequal length strings,
         // we won't even try to decrypt. This counts as two failures
-        failCount = 2;
+        *failCount += 2;
         s1 = fail;
         s2 = fail;
     }
-    // char * decryptedText = (char *) malloc(encryptedLen)+1;
+    else 
+    {
+        *passCount += 1;
+    }
+
     unsigned char * dPtr = decryptBuffer;
     char * encCharPtr = cipherText;
-    // don't try to decrypt if lengths aren't equal
-    if(failCount == 0)
+    
+    // only attempt to decrypt if strlen test passed
+    if(*failCount == 0)
     {
         char inpChar;
         // should really check key to make sure it's in range...
@@ -151,21 +170,31 @@ static int testResult(int testNum,
         if(strcmp((const char *) decryptBuffer,(const char *)origText) != 0)
         {
             s2 = fail;
-            ++failCount;
+            *failCount += 1;
         }
+        else
+        {
+            *passCount += 1;
+        }
+
     }
     
        
     snprintf((char*)uartTxBuffer, MAX_PRINT_LEN,
             "========= Test Number: %d\r\n"
+            "For clarity, input/output strings enclosed in <>'s\r\n"
             "key: %ld\r\n"
-            "input     text: %s\r\n"
-            "encrypted text: %s\r\n"
-            "decrypted text: %s\r\n"
+            "test case input text:           <%s>\r\n"
+            "encrypted text from asmEncrypt: <%s>\r\n"
+            "decrypted text:                 <%s>\r\n"
+            "test case string length:            %ld\r\n"
+            "asmEncrypt encrypted string length: %ld\r\n"
             "test results: length: %s; decrypted string: %s\r\n"
             "\r\n",
             testNum,key,
-            origText,cipherText,decryptBuffer, s1, s2); 
+            origText,cipherText,decryptBuffer,
+            origLen,encryptedLen,
+            s1, s2); 
 
 #if USING_HW 
     DMAC_ChannelTransfer(DMAC_CHANNEL_0, uartTxBuffer, \
@@ -173,7 +202,7 @@ static int testResult(int testNum,
         strlen((const char*)uartTxBuffer));
 #endif
     // free (decryptedText);
-    return failCount;
+    return ;
     
 }
 
@@ -211,8 +240,12 @@ int main ( void )
     uint32_t numKeys = sizeof(keyArray)/sizeof(keyArray[0]);
     uint32_t numStrings = sizeof(inpTextArray)/sizeof(inpTextArray[0]);
     // uint32_t numTests = numStrings*numKeys;
-    uint32_t testCount = 0;
-    int32_t totalFailCount = 0;
+    uint32_t testCaseNum = 0;
+    uint32_t totalTestCount = 0;
+    uint32_t totalFailCount = 0;
+    uint32_t totalPassCount = 0;
+    uint32_t passCount = 0;
+    uint32_t failCount = 0;
     
     while ( true )
     {
@@ -241,11 +274,12 @@ int main ( void )
                 // encrypt it
                 encryptedText = asmEncrypt(inpText,k);
                 
-                // check the result
-                int numFails = 0;
-                numFails = testResult(testCount, inpText, encryptedText,k);
-                totalFailCount += numFails;
-                ++testCount;
+                testResult(testCaseNum, inpText, encryptedText, k,
+                        &passCount, &failCount);
+                totalFailCount += failCount;
+                totalPassCount += passCount;
+                totalTestCount += failCount + passCount;
+                ++testCaseNum;
 #if USING_HW
                 // spin here until the UART has completed transmission
                 // and the timer has expired
@@ -276,8 +310,11 @@ int main ( void )
                 "========= ALL TESTS COMPLETE!\r\n"
                 "Post-test idle Count: %ld; "
                 "Total Passing Tests: %ld/%ld\r\n"
+                "Score: %ld/%d pts\r\n"
                 "\r\n",
-                idleCount, (testCount-totalFailCount),testCount); 
+                idleCount, 
+                totalPassCount,totalTestCount,
+                NUM_PTS_MAX*totalPassCount/totalTestCount,NUM_PTS_MAX); 
 
 #if USING_HW 
         DMAC_ChannelTransfer(DMAC_CHANNEL_0, uartTxBuffer, \

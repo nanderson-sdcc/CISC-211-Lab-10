@@ -76,7 +76,7 @@ asmEncrypt:
 upper_case:
    SUB r2, r2, 65
    ADD r2, r1, r2
-   MOV r2, r2 MOD 25
+   MOV r2, r2 MOD 26
    ADD r2, r2, 65
    B store
 
@@ -85,7 +85,7 @@ lower_case:
     BHS store
     SUB r2, r2, 97
     ADD r2, r1, r2
-    MOV r2, r2 MOD 25
+    MOV r2, r2 MOD 26
     ADD r2, r2, 97
 
 store:

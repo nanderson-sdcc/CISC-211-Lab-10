@@ -65,7 +65,36 @@ asmEncrypt:
     push {r4-r11,LR}
     
     /* YOUR asmEncrypt CODE BELOW THIS LINE! VVVVVVVVVVVVVVVVVVVVV  */
+    LDRB r2, [r0]
+    CMP r2, 0
+    BEQ done
+    CMP r2, 97
+    BHS lower_case
+    CMP r2, 65
+    BLO store
     
+upper_case:
+   SUB r2, r2, 65
+   ADD r2, r1, r2
+   MOV r2, r2 MOD 25
+   ADD r2, r2, 65
+   B store
+
+lower_case:
+    CMP r2, 123
+    BHS store
+    SUB r2, r2, 97
+    ADD r2, r1, r2
+    MOV r2, r2 MOD 25
+    ADD r2, r2, 97
+
+store:
+    STRB r2, [r0]
+    ADD r0, r0, 1
+    B asmEncrypt
+
+done:
+    LDR r0, =cipherText
     /* YOUR asmEncrypt CODE ABOVE THIS LINE! ^^^^^^^^^^^^^^^^^^^^^  */
 
     # restore the caller's registers, as required by the ARM calling convention

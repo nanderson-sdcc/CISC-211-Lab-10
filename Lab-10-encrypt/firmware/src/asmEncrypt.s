@@ -95,6 +95,19 @@ store: /* Now that we have done the shift, we store the character back into the 
 
 done: /*This ensures that the function returns the starting address to the string */
     LDR r0, =cipherText
+
+mod_26: /*this function calculates the input r2 value mod 26 using a loop */
+    PUSH {r4-r11, LR}
+    
+    MOV r4, 0 @this is a counter
+mod_loop:
+    SUB r2, r2, r4
+    CMP r2, 26
+    BHS mod_loop
+    /* at this point, we have our quotient in r4. Now we get the mod */
+    
+    POP {r4-r11, LR}
+     
     /* YOUR asmEncrypt CODE ABOVE THIS LINE! ^^^^^^^^^^^^^^^^^^^^^  */
 
     # restore the caller's registers, as required by the ARM calling convention

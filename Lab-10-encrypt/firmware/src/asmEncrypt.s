@@ -65,22 +65,22 @@ asmEncrypt:
     push {r4-r11,LR}
     
     /* YOUR asmEncrypt CODE BELOW THIS LINE! VVVVVVVVVVVVVVVVVVVVV  */
-    LDRB r2, [r0]
-    CMP r2, 0
+    LDRB r2, [r0] /*First, we load the current byte from the pointer */
+    CMP r2, 0 /*This checks if it is the terminating character */
     BEQ done
-    CMP r2, 97
+    CMP r2, 97 /*This checks if it is in the possible range for uppercase */
     BHS lower_case
-    CMP r2, 65
+    CMP r2, 65 /*This checks if it is out of range for lower case */
     BLO store
     
-upper_case:
+upper_case: /* At this point, we can assume it is uppercase. The process here will shift all our characters properly */
    SUB r2, r2, 65
    ADD r2, r1, r2
    MOV r2, r2 MOD 26
    ADD r2, r2, 65
    B store
 
-lower_case:
+lower_case: /*This is the process for properly shifting a lowercase character */
     CMP r2, 123
     BHS store
     SUB r2, r2, 97
@@ -88,12 +88,12 @@ lower_case:
     MOV r2, r2 MOD 26
     ADD r2, r2, 97
 
-store:
+store: /* Now that we have done the shift, we store the character back into the string and increment our pointer */
     STRB r2, [r0]
     ADD r0, r0, 1
     B asmEncrypt
 
-done:
+done: /*This ensures that the function returns the starting address to the string */
     LDR r0, =cipherText
     /* YOUR asmEncrypt CODE ABOVE THIS LINE! ^^^^^^^^^^^^^^^^^^^^^  */
 
